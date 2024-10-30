@@ -14,6 +14,7 @@ const geistMono = localFont({
 });
 
 const inter = Inter({ subsets: ['latin'] })
+// added a comment
 
 export const metadata = {
   title: "Chat",
