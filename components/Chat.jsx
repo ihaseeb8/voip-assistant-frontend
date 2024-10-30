@@ -18,7 +18,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
 
   const scrollToBottom = () => {
     setTimeout(() => {
-      chatContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      chatContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, 100);
   };
 
