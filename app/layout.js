@@ -16,6 +16,8 @@ const geistMono = localFont({
 const inter = Inter({ subsets: ['latin'] })
 // added a comment
 
+import { AuthProvider } from "./context/AuthContext";
+
 export const metadata = {
   title: "Chat",
   description: "Created with Next.js",
@@ -24,11 +26,13 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body
-        className={`${inter.className} antialiased`}
-      >
-        {children}
-      </body>
+      <AuthProvider>
+        <body
+          className={`${inter.className} antialiased`}
+        >
+          {children}
+        </body>
+      </AuthProvider>
     </html>
   );
 }

@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useContext } from 'react'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Menu, Search, Send } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import userIcon from '../app/icons/user-round.svg'
+import AuthContext from '@/app/context/AuthContext'
 
 const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState(""); // New state to hold the search query
   const [message, setMessage] = useState('');
   const [isLoading, setisLoading] = useState(true)
+  const {user, login, logout} = useContext(AuthContext);
 
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -72,11 +74,16 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.access_token}`,
         },
         body: JSON.stringify({
           contact_number: contactNumber,
         }),
       });
+
+      if(response.status == 401){
+        logout();
+      }
 
       if (response.ok) {
         const data = await response.json();
@@ -150,12 +157,17 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.access_token}`,
         },
         body: JSON.stringify({
           contact_number: contact.phone_number,
           message: message,
         }),
       });
+
+      if(response.status == 401){
+        logout();
+      }
 
       if (response.ok) {
         // Clear the input after successful message send
