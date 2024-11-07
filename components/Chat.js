@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useContext } from 'react'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Menu, Search, Send } from 'lucide-react'
+import { Menu, Search, Send, Archive } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import userIcon from '../app/icons/user-round.svg'
@@ -170,11 +170,15 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       }
 
       if (response.ok) {
+
+        // console.log(response)
         // Clear the input after successful message send
         setMessage('');
         console.log('Message sent successfully!');
       } else {
-        console.error('Failed to send message:', response.status, await response.text());
+        let responseText = await response.text()
+        console.error('Failed to send message:', response.status, responseText);
+        alert(responseText)
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -207,7 +211,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
           />
         </div>
       </header>
-
+      
       <ScrollArea className="flex-1 p-4">
         <div ref={chatContainerRef} className="space-y-4">
           {filteredMessages.length > 0 ? (
@@ -227,7 +231,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
               </div>
             ))
           ) : (
-            <p className="text-gray-500 text-center h-screen">{`${isLoading ? 'Loading Messages...' : 'No messages match the search query.'}`}</p>
+            <p className="text-gray-500 text-center h-screen">{`${isLoading ? 'Loading Messages...' : ''}`}</p>
           )}
         </div>
       </ScrollArea>
