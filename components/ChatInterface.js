@@ -373,15 +373,27 @@ export default function ChatInterface() {
                 </div>
               ))
             ) : (
-              <div className="p-4" onClick={() => handleChatSelect({phone_number: searchQuery, is_archived: false, message: "", unread_count: 0})}>
-                <div className="flex items-center space-x-4 p-6 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors duration-300 border-b cursor-pointer">
-                  <MessageCircle />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{searchQuery || "New Contact"}</p>
-                    <p className="text-sm text-gray-300">Start a new conversation</p>
+              searchQuery && ( // Check if searchQuery exists
+                <div
+                  className="p-4"
+                  onClick={() =>
+                    handleChatSelect({
+                      phone_number: searchQuery,
+                      is_archived: false,
+                      message: "",
+                      unread_count: 0,
+                    })
+                  }
+                >
+                  <div className="flex items-center space-x-4 p-6 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors duration-300 border-b cursor-pointer">
+                    <MessageCircle />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{searchQuery || "New Contact"}</p>
+                      <p className="text-sm text-gray-300">Start a new conversation</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )
             )}
           </ScrollArea>
           )}
