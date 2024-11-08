@@ -6,15 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {Switch} from '@/components/ui/switch'
-import { Menu, D, MoreVertical, Phone, Search, Send, Video, User, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
+import { Menu, D, MoreVertical, Phone, Search, Send, Video, User, Archive, ArchiveRestore, MessageCircle, Settings, LogOut } from 'lucide-react'
 import Chat from "@/components/Chat"
 import userIcon from '../app/icons/user-round.svg'
 import { cn } from "@/lib/utils"
-import AuthContext from "@/app/context/AuthContext"
+import AuthContext from "@/components/AuthContext"
+import { useRouter } from "next/navigation"
 
 export default function ChatInterface() {
 
   const {user, login, logout} = useContext(AuthContext);
+  const router = useRouter();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
@@ -282,13 +284,37 @@ export default function ChatInterface() {
 
   return (
       <div className="flex h-screen bg-gray-100 overflow-hidden">
+        
         {/* Sidebar */}
         <div
           className={`bg-white w-full max-w-sm border-r border-gray-200 shadow-lg transition-all duration-300 ease-in-out flex flex-col ${
             isSidebarOpen ? "flex" : "hidden"
           } md:flex`}
         >
+          
           <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center pb-2 justify-between">
+
+              <div className="flex items-center space-x-3">
+                <User className="h-8 w-8 text-gray-600" />
+                <span className="text-md font-semibold">{user.username}</span>
+              </div>
+
+              <div className="flex space-x-2">
+                
+                {user?.role === 'admin' && (
+                  <Button variant="ghost" size="icon" onClick={()=>{router.push('/admin')}}>
+                    <Settings className="h-5 w-5" />
+                    <span className="sr-only">Admin Dashboard</span>
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={()=>{logout()}}>
+                  <LogOut className="h-5 w-5" />
+                  <span className="sr-only">Log Out</span>
+                </Button>
+              </div>
+            </div>
+
             <div className="mt-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input placeholder="Search or start new chat" 

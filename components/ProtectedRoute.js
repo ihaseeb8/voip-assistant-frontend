@@ -2,14 +2,13 @@
 
 import { useContext, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import AuthContext from "@/app/context/AuthContext";
+import AuthContext from "@/components/AuthContext";
 
 const ProtectedRoute = ({children}) => {
-    const {user} = useContext(AuthContext);
+    const {user, login, logout} = useContext(AuthContext);
     const router = useRouter();
 
     useEffect(()=>{
-
         if(!user){
             router.push('/login')
         }

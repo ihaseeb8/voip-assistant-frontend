@@ -1,7 +1,7 @@
 'use client'
 
-import { useContext, useState } from "react";
-import AuthContext from "../context/AuthContext";
+import { useContext, useState,useEffect } from "react";
+import AuthContext from "../../components/AuthContext";
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,9 +18,12 @@ const Login = () => {
     const [error, setError] = useState('')
     const router = useRouter();
 
-    if(user){
-        router.push('/')
-    }
+    // Redirect to home if the user is logged in
+    useEffect(() => {
+        if (user) {
+            router.push('/');  // Redirect after mount
+        }
+    }, [user, router]); // Only run this when `user` changes
 
     const handleSubmit = (e) => {
         setError('')

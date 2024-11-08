@@ -3,6 +3,7 @@
 import { createContext, useState, useEffect } from "react";
 import axios from 'axios';
 import { useRouter } from "next/navigation";
+import {jwtDecode} from 'jwt-decode';
 
 const AuthContext = createContext();
 
@@ -16,7 +17,12 @@ export const AuthProvider = ({ children }) => {
         if (token) {
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             // Fetch user details if necessary or set user state directly
-            setUser({ access_token: token });
+            const decodedToken = jwtDecode(token);
+            setUser({
+                username: decodedToken.sub,  // 'sub' is the username in the token
+                role: decodedToken.role,      // 'role' is the role in the token
+                access_token: token           // Store the access token as well
+            });
         }
     }, []);
 
@@ -34,8 +40,16 @@ export const AuthProvider = ({ children }) => {
             const token = response.data.access_token;
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
+            // Decode the token to extract user details
+            const decodedToken = jwtDecode(token);
             localStorage.setItem('token', token);
-            setUser({ access_token: token });
+
+            setUser({
+                username: decodedToken.sub,  // 'sub' is the username in the token
+                role: decodedToken.role,      // 'role' is the role in the token
+                access_token: token           // Store the access token as well
+            });
+
             router.push('/');
         } catch (error) {
             console.log('Login Failed: ', error);

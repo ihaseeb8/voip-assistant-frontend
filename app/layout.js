@@ -16,7 +16,7 @@ const geistMono = localFont({
 const inter = Inter({ subsets: ['latin'] })
 // added a comment
 
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider } from "../components/AuthContext";
 
 export const metadata = {
   title: "Chat",

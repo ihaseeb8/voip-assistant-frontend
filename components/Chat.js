@@ -5,7 +5,7 @@ import { Menu, Search, Send, Archive } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import userIcon from '../app/icons/user-round.svg'
-import AuthContext from '@/app/context/AuthContext'
+import AuthContext from '@/components/AuthContext'
 
 const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   const [messages, setMessages] = useState([]);
