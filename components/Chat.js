@@ -1,3 +1,5 @@
+import { Device } from "@twilio/voice-sdk";
+
 import React, { useState, useEffect, useRef, useContext } from 'react'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -7,6 +9,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import userIcon from '../app/icons/user-round.svg'
 import AuthContext from '@/components/AuthContext'
 
+import { PhoneOutgoing } from "lucide-react";
+
 const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState(""); // New state to hold the search query
@@ -14,24 +18,57 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   const [isLoading, setisLoading] = useState(true)
   const {user, login, logout} = useContext(AuthContext);
 
+  const deviceRef = useRef(null); // Persistent Device instance
+  const chatContainerRef = useRef(null); // Scroll container ref
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-  const chatContainerRef = useRef(null);
+  const filteredMessages = messages.filter((msg) =>
+    msg.content.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const [callState, setCallState] = useState("idle"); // idle, ringing, active
+  const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
+  const callTimerRef = useRef(null); // Ref to manage call timer
+
+  const [incomingCall, setIncomingCall] = useState(null);
+
+  const [micVolume, setMicVolume] = useState(0);
+  const [speakerVolume, setSpeakerVolume] = useState(0);
+
+
 
   const scrollToBottom = () => {
-    setTimeout(() => {
-      chatContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }, 100);
+    chatContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   };
 
-  useEffect(()=>{
-    scrollToBottom();
-  }, [messages])
+  const [availableDevices, setAvailableDevices] = useState({
+    speakers: [],
+    ringers: [],
+  });
+  const [selectedDevices, setSelectedDevices] = useState({
+    speakers: [],
+    ringers: [],
+  });
+  
+  const updateAudioDevices = () => {
+    deviceRef.current.audio.speakerDevices.set(selectedDevices.speakers);
+    deviceRef.current.audio.ringtoneDevices.set(selectedDevices.ringers);
+  };
 
+  const bindVolumeIndicators = (call) => {
+    call.on("volume", (inputVolume, outputVolume) => {
+      setMicVolume(Math.floor(inputVolume * 100)); // Convert to percentage
+      setSpeakerVolume(Math.floor(outputVolume * 100));
+    });
+  };
 
 
   useEffect(() => {
-    
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    initializeTwilioDevice();
     if (contact && contact.phone_number) {
       fetchMessages(contact.phone_number);
     }
@@ -68,34 +105,50 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
     };
   }, [contact]);
 
-  const fetchMessages = async (contactNumber) => {
+  const initializeTwilioDevice = async () => {
     try {
-      const response = await fetch(`http://${backendURL}/messages-by-contact`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.access_token}`,
-        },
-        body: JSON.stringify({
-          contact_number: contactNumber,
-        }),
+      const username = user.username || "defaultUser";
+      const response = await fetch(`http://${backendURL}/token?identity=${username}`);
+      const data = await response.json();
+
+      if (!data.token) {
+        throw new Error("Failed to retrieve Twilio token");
+      }
+
+      deviceRef.current = new Device(data.token, { logLevel: 1, codecPreferences: ["opus", "pcmu"],});
+      deviceRef.current.on("registered", () => console.log("Twilio Device registered successfully"));
+      deviceRef.current.on("incoming", handleIncomingCall);
+      deviceRef.current.on("deviceChange", () => {
+        console.log("Device change detected");
+        updateAudioDevices();
       });
-
-      if(response.status == 401){
-        logout();
-      }
-
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data.messages); // assuming response has a messages array
-      } else {
-        console.error('Failed to fetch messages');
-      }
+      // deviceRef.current.on("error", (error) => console.error("Device error:", error.message));
+      // deviceRef.current.on("disconnect", () => console.log("Device disconnected"));
+      deviceRef.current.register();
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.error("Error initializing Twilio Device:", error);
     }
-    setisLoading(false)
   };
+
+
+  const startCallTimer = () => {
+    setCallDuration(0); // Reset duration
+    callTimerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const stopCallTimer = () => {
+    clearInterval(callTimerRef.current);
+    callTimerRef.current = null;
+  };
+
+  const formatCallDuration = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
 
   const formatTimestamp = (timestamp) => {
     const date = new Date(timestamp);
@@ -142,54 +195,170 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
     }
   };
 
-  // Filter messages based on search query
-  const filteredMessages = messages.filter((msg) =>
-    msg.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleIncomingCall = (call) => {
+    bindVolumeIndicators(call);
+    setIncomingCall(call);
+    setCallState("ringing");
 
-  // function to send message
-  const handleSendMessage = async () => {
-    if (!message.trim()) return; // Prevent empty messages
+    // Attach Call events
+    call.on("accept", () => {
+      console.log("Incoming call accepted.");
+      setCallState("active");
+    });
 
+    call.on("disconnect", () => {
+      console.log("Incoming call disconnected.");
+      setIncomingCall(null);
+      setCallState("idle");
+    });
+
+    call.on("error", (error) => {
+      console.error("Incoming call error:", error.message);
+      setIncomingCall(null);
+      setCallState("idle");
+    });
+  };
+
+  const acceptIncomingCall = () => {
+    if (incomingCall) {
+      incomingCall.accept();
+      setCallState("active");
+    }
+  };
+
+  const rejectIncomingCall = () => {
+    if (incomingCall) {
+      incomingCall.reject();
+      setCallState("idle");
+    }
+  };
+
+  const makeOutgoingCall = () => {
+    const device = deviceRef.current;
+    if (!device || !contact?.phone_number) {
+      console.error("Twilio Device is not initialized or contact number is missing.");
+      return;
+    }
+
+    if (callState !== "idle") {
+      console.error("A call is already active.");
+      return; // Prevent initiating a new call
+    }
+    
+    const params = { To: contact.phone_number };
+    const call = deviceRef.current.connect({params}); // Initiate outgoing call
+
+    if (!call) {
+      console.error("Failed to initiate call.");
+      return;
+    }
+
+
+    setCallState("ringing");
+
+    bindVolumeIndicators(deviceRef.current);
+    console.log("Outgoing call initiated.");
+
+    console.log(device)
+    // Attach call lifecycle events via the Device instance
+    device.on("ringing", () => {
+      console.log("The call is ringing.");
+      setCallState("ringing");
+    });
+
+    device.on("connect", () => {
+      console.log("The call has been accepted.");
+      setCallState("active");
+      startCallTimer();
+    });
+
+    device.on("disconnect", () => {
+      console.log("The call has been disconnected.");
+      setCallState("idle");
+      stopCallTimer();
+    });
+
+    device.on("error", (error) => {
+      console.error("Call error:", error.message);
+      setCallState("idle");
+      stopCallTimer();
+    });
+  };
+
+
+  const rejectOutgoingCall = () => {
+    if (callState === "active" || callState === "ringing") {
+      deviceRef.current.disconnectAll();
+      setCallState("idle");
+      stopCallTimer();
+    }
+  };
+
+  useEffect(() => {
+    return () => stopCallTimer(); // Cleanup timer on component unmount
+  }, []);
+
+
+  const fetchMessages = async (contactNumber) => {
     try {
-      // Sending the message to the specified endpoint
-      const response = await fetch(`http://${backendURL}/send-assistant-message`, {
-        method: 'POST',
+      const response = await fetch(`http://${backendURL}/messages-by-contact`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.access_token}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.access_token}`,
         },
-        body: JSON.stringify({
-          contact_number: contact.phone_number,
-          message: message,
-        }),
+        body: JSON.stringify({ contact_number: contactNumber }),
       });
 
-      if(response.status == 401){
+      if (response.status === 401) {
         logout();
       }
 
       if (response.ok) {
-
-        // console.log(response)
-        // Clear the input after successful message send
-        setMessage('');
-        console.log('Message sent successfully!');
-      } else {
-        let responseText = await response.text()
-        console.error('Failed to send message:', response.status, responseText);
-        alert(responseText)
+        const data = await response.json();
+        setMessages(data.messages || []);
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error("Error fetching messages:", error);
+    }
+
+    setisLoading(false)
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim()) return;
+
+    try {
+      const response = await fetch(`http://${backendURL}/send-assistant-message`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.access_token}`,
+        },
+        body: JSON.stringify({
+          contact_number: contact.phone_number,
+          message,
+        }),
+      });
+
+      if (response.status === 401) {
+        logout();
+      }
+
+      if (response.ok) {
+        setMessage("");
+        console.log("Message sent successfully!");
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
     }
   };
 
   return (
     <div className="flex-1 flex flex-col bg-gray-200">
       <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center space-x-4 flex-1">
-          <Button variant="ghost" size="icon" className="md:hidden rounded-full hover:bg-gray-100" onClick={toggleSidebar}>
+      <div className="flex items-center space-x-4 flex-1">
+        <Button variant="ghost" size="icon" className="md:hidden rounded-full hover:bg-gray-100" onClick={toggleSidebar}>
             <Menu className="h-5 w-5 text-gray-600" />
             <span className="sr-only">Toggle sidebar</span>
           </Button>
@@ -200,6 +369,27 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
           <div>
             <h2 className="text-sm font-semibold text-gray-900">{contact.phone_number}</h2>
           </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          {/* Call Button */}
+          <Button
+            onClick={callState === "active" || callState === "ringing" ? rejectOutgoingCall : makeOutgoingCall}
+            className={`rounded-full ${
+              callState === "active" || callState === "ringing"
+                ? "bg-red-500 hover:bg-red-600"
+                : "bg-green-500 hover:bg-green-600"
+            } transition-all duration-300`}
+          >
+            <PhoneOutgoing className="h-5 w-5 text-white" />
+            <span className="sr-only">
+              {callState === "active" || callState === "ringing" ? "End call" : "Make call"}
+            </span>
+          </Button>
+
+          {/* Display Call Duration during active call */}
+          {callState === "active" && (
+            <span className="text-sm font-semibold text-gray-700">{formatCallDuration(callDuration)}</span>
+          )}
         </div>
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -213,28 +403,48 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       </header>
       
       <ScrollArea className="flex-1 p-4">
-        <div ref={chatContainerRef} className="space-y-4">
-          {filteredMessages.length > 0 ? (
-            filteredMessages.map((message, i) => (
+      <div ref={chatContainerRef} className="space-y-4">
+        {filteredMessages.length > 0 ? (
+          filteredMessages.map((message, i) => (
+            <div
+              key={i}
+              className={`flex ${message.role === 'assistant' ? "justify-end" : "justify-start"}`}
+            >
               <div
-                key={i}
-                className={`flex ${message.role === 'assistant' ? "justify-end" : "justify-start"}`}
+                className={`inline-block sm:max-w-[60%] max-w-[90%] rounded-lg p-3 shadow-md ${
+                  message.role === 'assistant'
+                    ? "bg-green-600 text-white rounded-br-none"
+                    : message.role === 'user'
+                    ? "bg-white rounded-bl-none"
+                    : 'hidden'
+                }`}
               >
-                <div
-                  className={`inline-block sm:max-w-[60%] max-w-[90%] rounded-lg p-3 shadow-md ${message.role === 'assistant' ? "bg-green-600 text-white rounded-br-none" : message.role === 'user' ? "bg-white rounded-bl-none" : 'hidden'}`}
-                >
+                {message.media_path ? (
+                  <img
+                    src={`http://${backendURL}${message.media_path.substring(message.media_path.indexOf("/media"))}`}
+                    alt="Message Media"
+                    className="rounded-md max-w-full"
+                    style={{ border: '1px solid red', width: 'auto', height: 'auto' }} // Temporary debug styles
+                    onError={(e) => {
+                      console.error(`Image failed to load: http://${backendURL}${message.media_path}`);
+                      e.target.style.display = 'none'; // Fallback to hide image
+                    }}
+                    onLoad={() => console.log(`Image loaded successfully.`)}
+                  />
+                ) : (
                   <p className="text-sm">{message.content}</p>
-                  <span className="text-xs opacity-70 mt-1 block text-right">
-                    {message.timestamp ? <>{formatTimestamp(message.timestamp)}</> : <></>}
-                  </span>
-                </div>
+                )}
+                <span className="text-xs opacity-70 mt-1 block text-right">
+                  {message.timestamp ? <>{formatTimestamp(message.timestamp)}</> : <></>}
+                </span>
               </div>
-            ))
-          ) : (
-            <p className="text-gray-500 text-center h-screen">{`${isLoading ? 'Loading Messages...' : ''}`}</p>
-          )}
-        </div>
-      </ScrollArea>
+            </div>
+          ))
+        ) : (
+          <p className="text-gray-500 text-center h-screen">{`${isLoading ? 'Loading Messages...' : ''}`}</p>
+        )}
+      </div>
+    </ScrollArea>
 
       <div className="bg-white border-t border-gray-200 p-4">
         <div className="flex items-center space-x-2">
@@ -264,3 +474,4 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
 };
 
 export default Chat;
+        

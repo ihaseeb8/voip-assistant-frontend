@@ -345,7 +345,7 @@ export default function ChatInterface() {
                 <div
                   key={i}
                   className={cn(
-                    "flex items-center space-x-4 p-4 hover:bg-gray-100 transition-colors duration-200 border-b cursor-pointer",
+                    "flex items-center max-w-[380px] space-x-4 p-4 hover:bg-gray-100 transition-colors duration-200 border-b cursor-pointer",
                     {
                       "bg-green-100 hover:bg-green-200":
                         contact.phone_number === selectedChat?.phone_number,
