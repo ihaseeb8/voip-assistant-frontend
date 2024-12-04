@@ -3,7 +3,7 @@ import { Device } from "@twilio/voice-sdk";
 import React, { useState, useEffect, useRef, useContext } from 'react'
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Menu, Search, Send, Archive } from 'lucide-react'
+import { Menu, Search, Send, Archive, ImageIcon, X } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import userIcon from '../app/icons/user-round.svg'
@@ -12,6 +12,34 @@ import AuthContext from '@/components/AuthContext'
 import { PhoneOutgoing } from "lucide-react";
 
 const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
+
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleImageSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setSelectedImage(file);
+      
+      // Create image preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeSelectedImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState(""); // New state to hold the search query
   const [message, setMessage] = useState('');
@@ -111,22 +139,27 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       const response = await fetch(`http://${backendURL}/token?identity=${username}`);
       const data = await response.json();
 
+      
       if (!data.token) {
         throw new Error("Failed to retrieve Twilio token");
       }
 
-      deviceRef.current = new Device(data.token, { logLevel: 1, codecPreferences: ["opus", "pcmu"],});
+
+      deviceRef.current = new Device(data.token, { codecPreferences: ["opus", "pcmu"],});
       deviceRef.current.on("registered", () => console.log("Twilio Device registered successfully"));
       deviceRef.current.on("incoming", handleIncomingCall);
       deviceRef.current.on("deviceChange", () => {
         console.log("Device change detected");
         updateAudioDevices();
       });
-      // deviceRef.current.on("error", (error) => console.error("Device error:", error.message));
-      // deviceRef.current.on("disconnect", () => console.log("Device disconnected"));
+      deviceRef.current.on("error", (error) => alert("Device error:", error.message));
+      deviceRef.current.on("disconnect", () => {
+        console.log("Device disconnected")
+        rejectOutgoingCall();
+      });
       deviceRef.current.register();
     } catch (error) {
-      console.error("Error initializing Twilio Device:", error);
+      alert("Error initializing Twilio Device:", error);
     }
   };
 
@@ -196,6 +229,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   };
 
   const handleIncomingCall = (call) => {
+    console.log("received incoming call!!!")
     bindVolumeIndicators(call);
     setIncomingCall(call);
     setCallState("ringing");
@@ -264,6 +298,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
     device.on("ringing", () => {
       console.log("The call is ringing.");
       setCallState("ringing");
+      startCallTimer();
     });
 
     device.on("connect", () => {
@@ -326,19 +361,30 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   };
 
   const handleSendMessage = async () => {
-    if (!message.trim()) return;
+    // Prevent sending if no message and no image
+    if (!message.trim() && !selectedImage) return;
 
     try {
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      formData.append('contact_number', contact.phone_number);
+      
+      // Add message if exists
+      if (message.trim()) {
+        formData.append('message', message);
+      }
+      
+      // Add image if selected
+      if (selectedImage) {
+        formData.append('media', selectedImage);
+      }
+
       const response = await fetch(`http://${backendURL}/send-assistant-message`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.access_token}`,
+          'Authorization': `Bearer ${user.access_token}`,
         },
-        body: JSON.stringify({
-          contact_number: contact.phone_number,
-          message,
-        }),
+        body: formData, // Use FormData instead of JSON
       });
 
       if (response.status === 401) {
@@ -346,7 +392,9 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       }
 
       if (response.ok) {
+        // Reset message and image states
         setMessage("");
+        removeSelectedImage();
         console.log("Message sent successfully!");
       }
     } catch (error) {
@@ -374,7 +422,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
           {/* Call Button */}
           <Button
             onClick={callState === "active" || callState === "ringing" ? rejectOutgoingCall : makeOutgoingCall}
-            className={`rounded-full ${
+            className={`rounded-full mx-2 ${
               callState === "active" || callState === "ringing"
                 ? "bg-red-500 hover:bg-red-600"
                 : "bg-green-500 hover:bg-green-600"
@@ -388,7 +436,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
 
           {/* Display Call Duration during active call */}
           {callState === "active" && (
-            <span className="text-sm font-semibold text-gray-700">{formatCallDuration(callDuration)}</span>
+            <div className="text-sm font-semibold text-gray-700 px-2">{formatCallDuration(callDuration)}</div>
           )}
         </div>
         <div className="relative flex-1 max-w-md">
@@ -401,6 +449,26 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
           />
         </div>
       </header>
+
+      {imagePreview && (
+        <div className="absolute bottom-20 right-4 z-10 w-64 h-64 bg-white shadow-lg rounded-lg p-2">
+          <div className="relative w-full h-full">
+            <img 
+              src={imagePreview} 
+              alt="Selected" 
+              className="w-full h-full object-cover rounded-md"
+            />
+            <Button 
+              variant="destructive" 
+              size="icon" 
+              className="absolute -top-2 -right-2 w-6 h-6 rounded-full"
+              onClick={removeSelectedImage}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
       
       <ScrollArea className="flex-1 p-4">
       <div ref={chatContainerRef} className="space-y-4">
@@ -424,16 +492,20 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
                     src={`http://${backendURL}${message.media_path.substring(message.media_path.indexOf("/media"))}`}
                     alt="Message Media"
                     className="rounded-md max-w-full"
-                    style={{ border: '1px solid red', width: 'auto', height: 'auto' }} // Temporary debug styles
+                    style={{ width: '600px', height: 'auto' }} // Temporary debug styles
                     onError={(e) => {
                       console.error(`Image failed to load: http://${backendURL}${message.media_path}`);
                       e.target.style.display = 'none'; // Fallback to hide image
                     }}
-                    onLoad={() => console.log(`Image loaded successfully.`)}
+                    onLoad={() => {}}
                   />
                 ) : (
                   <p className="text-sm">{message.content}</p>
                 )}
+
+                {message.media_path && message.content && 
+                  <p className="text-sm py-2">{message.content}</p>
+                }
                 <span className="text-xs opacity-70 mt-1 block text-right">
                   {message.timestamp ? <>{formatTimestamp(message.timestamp)}</> : <></>}
                 </span>
@@ -446,8 +518,28 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       </div>
     </ScrollArea>
 
-      <div className="bg-white border-t border-gray-200 p-4">
+    <div className="bg-white border-t border-gray-200 p-4">
         <div className="flex items-center space-x-2">
+          {/* Image Upload Button */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => fileInputRef.current?.click()}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <ImageIcon className="h-5 w-5" />
+            <span className="sr-only">Upload Image</span>
+          </Button>
+          
+          {/* Hidden File Input */}
+          <input 
+            type="file" 
+            ref={fileInputRef}
+            onChange={handleImageSelect}
+            accept="image/*"
+            className="hidden"
+          />
+
           <Input 
             placeholder="Type a message" 
             className="flex-1 bg-gray-100 border-none rounded-full focus:ring-2 focus:ring-green-500 focus:ring-offset-2" 
@@ -458,12 +550,13 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
                 handleSendMessage();
               }
             }}
-            />
+          />
           <Button 
             size="icon" 
             className="rounded-full bg-green-500 hover:bg-green-600 transition-colors duration-200"
             onClick={handleSendMessage}
-            >
+            disabled={!message.trim() && !selectedImage}
+          >
             <Send className="h-5 w-5 text-white" />
             <span className="sr-only">Send message</span>
           </Button>
