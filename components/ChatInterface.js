@@ -76,11 +76,11 @@ export default function ChatInterface() {
     const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://', 'ws://')}/ws`);
     
     socket.onopen = function () {
-        console.log("WebSocket connection established");
+        console.log("ChatInterface: WebSocket connection established");
     };
 
     socket.onerror = function (error) {
-        console.error("WebSocket error observed:", error);
+        console.error("ChatInterface: WebSocket error observed:", error);
     };
 
     socket.onmessage = function (event) {
@@ -99,7 +99,7 @@ export default function ChatInterface() {
     };
 
     socket.onclose = function () {
-        // console.log("WebSocket connection closed");
+        console.log("ChatInterface: WebSocket connection closed");
     };
 
     // Cleanup the WebSocket connection when the component unmounts

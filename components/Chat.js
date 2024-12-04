@@ -76,11 +76,11 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
     const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://', 'ws://')}/ws`);
 
     socket.onopen = function () {
-      // console.log("WebSocket connection established");
+      console.log("Chat: WebSocket connection established");
     };
 
     socket.onerror = function (error) {
-      // console.error("WebSocket error observed:", error);
+      console.error("Chat: WebSocket error observed:", error);
     };
 
     socket.onmessage = function (event) {
@@ -97,7 +97,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
     };
 
     socket.onclose = function () {
-      // console.log("WebSocket connection closed");
+      console.log("Chat: WebSocket connection closed");
     };
 
     return () => {
