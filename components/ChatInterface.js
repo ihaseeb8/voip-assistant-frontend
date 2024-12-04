@@ -73,7 +73,7 @@ export default function ChatInterface() {
 
     // Websocket logic.
     // WebSocket setup
-    const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://').replace('ws://')}/ws`);
+    const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://', 'ws://')}/ws`);
     
     socket.onopen = function () {
         console.log("WebSocket connection established");
