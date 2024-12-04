@@ -73,7 +73,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       fetchMessages(contact.phone_number);
     }
 
-    const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://').replace('ws://')}/ws`);
+    const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://', 'ws://')}/ws`);
 
     socket.onopen = function () {
       // console.log("WebSocket connection established");
