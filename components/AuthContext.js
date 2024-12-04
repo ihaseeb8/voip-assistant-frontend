@@ -33,7 +33,7 @@ export const AuthProvider = ({ children }) => {
             const formData = new FormData();
             formData.append('username', username);
             formData.append('password', password);
-            const response = await axios.post(`http://${backendURL}/auth/token`, formData, {
+            const response = await axios.post(`${backendURL}/auth/token`, formData, {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             });
             

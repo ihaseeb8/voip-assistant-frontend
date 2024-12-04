@@ -73,7 +73,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       fetchMessages(contact.phone_number);
     }
 
-    const socket = new WebSocket(`ws://${backendURL}/ws`);
+    const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://').replace('ws://')}/ws`);
 
     socket.onopen = function () {
       // console.log("WebSocket connection established");
@@ -108,7 +108,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   const initializeTwilioDevice = async () => {
     try {
       const username = user.username || "defaultUser";
-      const response = await fetch(`http://${backendURL}/token?identity=${username}`);
+      const response = await fetch(`${backendURL}/token?identity=${username}`);
       const data = await response.json();
 
       if (!data.token) {
@@ -301,7 +301,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
 
   const fetchMessages = async (contactNumber) => {
     try {
-      const response = await fetch(`http://${backendURL}/messages-by-contact`, {
+      const response = await fetch(`${backendURL}/messages-by-contact`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -329,7 +329,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
     if (!message.trim()) return;
 
     try {
-      const response = await fetch(`http://${backendURL}/send-assistant-message`, {
+      const response = await fetch(`${backendURL}/send-assistant-message`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -421,12 +421,12 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
               >
                 {message.media_path ? (
                   <img
-                    src={`http://${backendURL}${message.media_path.substring(message.media_path.indexOf("/media"))}`}
+                    src={`${backendURL}${message.media_path.substring(message.media_path.indexOf("/media"))}`}
                     alt="Message Media"
                     className="rounded-md max-w-full"
                     style={{ border: '1px solid red', width: 'auto', height: 'auto' }} // Temporary debug styles
                     onError={(e) => {
-                      console.error(`Image failed to load: http://${backendURL}${message.media_path}`);
+                      console.error(`Image failed to load: ${backendURL}${message.media_path}`);
                       e.target.style.display = 'none'; // Fallback to hide image
                     }}
                     onLoad={() => console.log(`Image loaded successfully.`)}

@@ -73,7 +73,7 @@ export default function ChatInterface() {
 
     // Websocket logic.
     // WebSocket setup
-    const socket = new WebSocket(`ws://${backendURL}/ws`);
+    const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://').replace('ws://')}/ws`);
     
     socket.onopen = function () {
         console.log("WebSocket connection established");
@@ -110,7 +110,7 @@ export default function ChatInterface() {
   }, [])
 
   function fetchGPTStatus() {
-    fetch(`http://${backendURL}/is-allowed`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})
+    fetch(`${backendURL}/is-allowed`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})
       .then((res) => {
         if (!res.ok) {
           throw new Error('Network response was not ok');
@@ -130,7 +130,7 @@ export default function ChatInterface() {
   
 
   function fetchContacts(){
-    fetch(`http://${backendURL}/contacts-list`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})
+    fetch(`${backendURL}/contacts-list`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})
         .then((res) => {
             if(res.status == 401){
                 logout();
@@ -163,7 +163,7 @@ export default function ChatInterface() {
   }
 
   function updateGPTStatus(allowGPT) {
-    fetch(`http://${backendURL}/let-gpt-answer`, {
+    fetch(`${backendURL}/let-gpt-answer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -189,7 +189,7 @@ export default function ChatInterface() {
   }
 
   function toggleArchiveChat(contact) {
-    fetch(`http://${backendURL}/archive-chat`, {
+    fetch(`${backendURL}/archive-chat`, {
         method: "POST",
         headers: {
             'Authorization': `Bearer ${user.access_token}`,
