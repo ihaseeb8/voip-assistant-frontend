@@ -26,9 +26,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <Head>
+      <head>
         <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
-      </Head>
+      </head>
       <AuthProvider>
         <body
           className={`${inter.className} antialiased`}
