@@ -127,8 +127,8 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
         console.log("Device change detected");
         updateAudioDevices();
       });
-      // deviceRef.current.on("error", (error) => console.error("Device error:", error.message));
-      // deviceRef.current.on("disconnect", () => console.log("Device disconnected"));
+      deviceRef.current.on("error", (error) => console.error("Device error:", error.message));
+      deviceRef.current.on("disconnect", () => console.log("Device disconnected"));
       deviceRef.current.register();
     } catch (error) {
       console.error("Error initializing Twilio Device:", error);
