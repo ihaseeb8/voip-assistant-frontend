@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import userIcon from '../app/icons/user-round.svg'
 import AuthContext from '@/components/AuthContext'
-import jwtDecode from 'jwt-decode';
+import { jwtDecode } from "jwt-decode";
 
 import { PhoneOutgoing } from "lucide-react";
 
