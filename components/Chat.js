@@ -118,7 +118,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       const token = data.token;
       const decodedToken = jwtDecode(token);
       const identity = decodedToken.sub || decodedToken.identity;
-      console.log('decodedToken: ' + decodedToken);
+      console.log('decodedToken: ', decodedToken);
       console.log('Device Identity:', identity);
 
       deviceRef.current = new Device(data.token, { allowIncomingWhileBusy: true, closeProtection: true, logLevel: 1, codecPreferences: ["opus", "pcmu"],});
