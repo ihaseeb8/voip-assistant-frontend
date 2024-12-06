@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useContext } from "react"
+import { Device } from "@twilio/voice-sdk";
+import { useState, useEffect, useContext, useRef } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -54,7 +55,91 @@ export default function ChatInterface() {
     }
   });
 
-  
+
+  useEffect(() => {
+    Notification.requestPermission().then((permission) => {
+      if (permission === "granted") {
+          console.log("Notification permission granted.");
+      } else {
+          console.log("Notification permission denied.");
+      }
+  });
+
+
+
+  })
+  useEffect(() => {
+    if (Notification.permission === "default") {
+        Notification.requestPermission()
+            .then((permission) => {
+                if (permission === "granted") {
+                    console.log("Notifications enabled!");
+                } else {
+                    console.log("Notifications denied!");
+                }
+            })
+            .catch((err) => console.error("Error requesting notification permission:", err));
+    }
+}, []);
+
+// const showNotification = (title, options, onActionClick) => {
+//   if (Notification.permission === "granted") {
+//       const notification = new Notification(title, options);
+
+//       // Handle button clicks
+//       notification.addEventListener("click", (event) => {
+//           if (event.action === "accept") {
+//               onActionClick("accept");
+//           } else if (event.action === "reject") {
+//               onActionClick("reject");
+//           } else {
+//               console.log("Notification clicked (no action).");
+//           }
+//       });
+//   } else {
+//       console.log("Notifications not allowed by the user.");
+//   }
+// };
+
+const showNotification = (options) => {
+  if ("serviceWorker" in navigator) {
+    console.log("Service worker is supported in this browser.");
+    navigator.serviceWorker.ready.then((registration) => {
+      console.log("service worker is ready to be used")
+        registration.showNotification("Incoming Call", options);
+    });
+}else{
+  console.log("Service Worker not supported in this browser.");
+}
+}
+
+const hideNotification = (tag) => {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.ready.then((registration) => {
+        registration.active.postMessage({ action: "cancel-notification", tag });
+    });
+}
+}
+
+useEffect(() => {
+  if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", (event) => {
+          const { action } = event.data;
+
+          if (action === "accept") {
+              console.log("Accepting call...");
+              if (incomingCall) {
+                  incomingCall.accept(); // Accept the call
+              }
+          } else if (action === "reject") {
+              console.log("Rejecting call...");
+              if (incomingCall) {
+                  incomingCall.reject(); // Reject the call
+              }
+          }
+      });
+  }
+}, []);
   // Inside the Home component
   const handleChatSelect = (contact) => {
 
@@ -101,9 +186,10 @@ export default function ChatInterface() {
   
 
   useEffect(() => {
+    console.log('using effect to initialize twilio device')
     fetchContacts();
     fetchGPTStatus();
-    // initializeTwilioDevice();
+    initializeTwilioDevice();
     // console.log(backendURL)
 
     // Websocket logic.
@@ -192,56 +278,22 @@ export default function ChatInterface() {
     return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const formatTimestamp = (timestamp) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-  
-    // Helper function to get the start of the week (assuming the week starts on Sunday)
-    const getStartOfWeek = (date) => {
-      const startOfWeek = new Date(date);
-      const day = startOfWeek.getDay(); // Day of the week (0 = Sunday, 6 = Saturday)
-      const diff = startOfWeek.getDate() - day;
-      startOfWeek.setDate(diff);
-      startOfWeek.setHours(0, 0, 0, 0); // Reset to start of day
-      return startOfWeek;
-    };
-  
-    // Check if date is today
-    const isToday = date.toDateString() === now.toDateString();
-  
-    // Check if date is within the same week as today
-    const isSameWeek = getStartOfWeek(now).getTime() === getStartOfWeek(date).getTime();
-  
-    // Format time as hh:mm AM/PM
-    const optionsTime = {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true, // Enable AM/PM format
-    };
-    const formattedTime = date.toLocaleTimeString('en-US', optionsTime);
-  
-    if (isToday) {
-      // If date is today, show only the time
-      return formattedTime;
-    } else if (isSameWeek) {
-      // If within the same week, show day of the week and time
-      const optionsDay = { weekday: 'short' }; // Short day name
-      const formattedDay = date.toLocaleDateString('en-US', optionsDay);
-      return `${formattedDay} ${formattedTime}`;
-    } else {
-      // If not today and not within the same week, show dd/mm/yy and time
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
-      const year = String(date.getFullYear()).slice(-2); // Last two digits of the year
-      return `${day}/${month}/${year} ${formattedTime}`;
-    }
-  };
-
   const handleIncomingCall = (call) => {
     bindVolumeIndicators(call);
     setIncomingCall(call);
     setCallState("ringing");
-
+    showNotification({
+      body: `Recieved call from ${call.parameters.CallSid}`,
+      icon: "call.png",
+      tag: call.parameters.CallSid,
+      actions: [
+        { action: "accept", title: "Accept" },
+        { action: "reject", title: "Reject" },
+      ],
+      requireInteraction: true,
+      priority: 1
+  });
+  console.log('shown notification')
     // Attach Call events
     call.on("accept", () => {
       console.log("Incoming call accepted.");

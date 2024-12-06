@@ -19,7 +19,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   const [isLoading, setisLoading] = useState(true)
   const {user, login, logout} = useContext(AuthContext);
 
-  // const deviceRef = useRef(null); // Persistent Device instance
+  const deviceRef = useRef(null); // Persistent Device instance
   const chatContainerRef = useRef(null); // Scroll container ref
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -30,9 +30,11 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   const [callState, setCallState] = useState("idle"); // idle, ringing, active
   const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
   const callTimerRef = useRef(null); // Ref to manage call timer
-
-  const [incomingCall, setIncomingCall] = useState(null);
-
+  let incomingCall = null;
+  // const [incomingCall, setIncomingCall] = useState(null);
+  const setIncomingCall = (call)=>{
+    incomingCall = call
+  }
   const [micVolume, setMicVolume] = useState(0);
   const [speakerVolume, setSpeakerVolume] = useState(0);
 
@@ -69,7 +71,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   }, [messages]);
 
   useEffect(() => {
-    initializeTwilioDevice();
+    // initializeTwilioDevice();
     if (contact && contact.phone_number) {
       fetchMessages(contact.phone_number);
     }
@@ -227,9 +229,12 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   };
 
   const acceptIncomingCall = () => {
+    console.log("incoming call null or not", incomingCall)
     if (incomingCall) {
       incomingCall.accept();
       setCallState("active");
+    }else{
+      console.log('incoming call is not true')
     }
   };
 
