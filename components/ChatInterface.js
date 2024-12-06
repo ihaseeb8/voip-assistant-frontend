@@ -12,12 +12,14 @@ import userIcon from '../app/icons/user-round.svg'
 import { cn } from "@/lib/utils"
 import AuthContext from "@/components/AuthContext"
 import { useRouter } from "next/navigation"
+import { jwtDecode } from "jwt-decode";
 
 export default function ChatInterface() {
 
   const {user, login, logout} = useContext(AuthContext);
   const router = useRouter();
 
+  const deviceRef = useRef(null); // Persistent Device instance
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
 
@@ -27,6 +29,15 @@ export default function ChatInterface() {
   const [searchQuery, setSearchQuery] = useState(""); // State for search query
   const [loadFailed, setloadFailed] = useState(false)
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+  const [callState, setCallState] = useState("idle"); // idle, ringing, active
+  const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
+  const callTimerRef = useRef(null); // Ref to manage call timer
+
+  const [incomingCall, setIncomingCall] = useState(null);
+
+  const [micVolume, setMicVolume] = useState(0);
+  const [speakerVolume, setSpeakerVolume] = useState(0);
 
   // const token = localStorage.getItem('token')
   // const filteredContacts = (contacts || []).filter(contact =>
@@ -59,6 +70,29 @@ export default function ChatInterface() {
     
   }
 
+  const [availableDevices, setAvailableDevices] = useState({
+    speakers: [],
+    ringers: [],
+  });
+  const [selectedDevices, setSelectedDevices] = useState({
+    speakers: [],
+    ringers: [],
+  });
+  
+  const updateAudioDevices = () => {
+    deviceRef.current.audio.speakerDevices.set(selectedDevices.speakers);
+    deviceRef.current.audio.ringtoneDevices.set(selectedDevices.ringers);
+  };
+
+  const bindVolumeIndicators = (call) => {
+    call.on("volume", (inputVolume, outputVolume) => {
+      setMicVolume(Math.floor(inputVolume * 100)); // Convert to percentage
+      setSpeakerVolume(Math.floor(outputVolume * 100));
+    });
+  };
+
+
+
 
 
   // useEffect(()=>{
@@ -69,6 +103,7 @@ export default function ChatInterface() {
   useEffect(() => {
     fetchContacts();
     fetchGPTStatus();
+    // initializeTwilioDevice();
     // console.log(backendURL)
 
     // Websocket logic.
@@ -108,6 +143,202 @@ export default function ChatInterface() {
     };
     
   }, [])
+
+  const initializeTwilioDevice = async () => {
+    try {
+      const username = user.username || "defaultUser";
+      const response = await fetch(`${backendURL}/token?identity=${username}`);
+      const data = await response.json();
+
+      if (!data.token) {
+        throw new Error("Failed to retrieve Twilio token");
+      }
+      const token = data.token;
+      const decodedToken = jwtDecode(token);
+      const identity = decodedToken.sub || decodedToken.identity;
+      console.log('decodedToken: ', decodedToken);
+      console.log('Device Identity:', identity);
+
+      deviceRef.current = new Device(data.token, { allowIncomingWhileBusy: true, closeProtection: true, logLevel: 1, codecPreferences: ["opus", "pcmu"],});
+      deviceRef.current.on("registered", () => console.log("Twilio Device registered successfully"));
+      deviceRef.current.on("incoming", handleIncomingCall);
+      deviceRef.current.on("deviceChange", () => {
+        console.log("Device change detected");
+        updateAudioDevices();
+      });
+      deviceRef.current.on("error", (error) => console.error("Device error:", error.message));
+      deviceRef.current.on("disconnect", () => console.log("Device disconnected"));
+      deviceRef.current.register();
+    } catch (error) {
+      console.error("Error initializing Twilio Device:", error);
+    }
+  };
+
+  const startCallTimer = () => {
+    setCallDuration(0); // Reset duration
+    callTimerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const stopCallTimer = () => {
+    clearInterval(callTimerRef.current);
+    callTimerRef.current = null;
+  };
+
+  const formatCallDuration = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+  
+    // Helper function to get the start of the week (assuming the week starts on Sunday)
+    const getStartOfWeek = (date) => {
+      const startOfWeek = new Date(date);
+      const day = startOfWeek.getDay(); // Day of the week (0 = Sunday, 6 = Saturday)
+      const diff = startOfWeek.getDate() - day;
+      startOfWeek.setDate(diff);
+      startOfWeek.setHours(0, 0, 0, 0); // Reset to start of day
+      return startOfWeek;
+    };
+  
+    // Check if date is today
+    const isToday = date.toDateString() === now.toDateString();
+  
+    // Check if date is within the same week as today
+    const isSameWeek = getStartOfWeek(now).getTime() === getStartOfWeek(date).getTime();
+  
+    // Format time as hh:mm AM/PM
+    const optionsTime = {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true, // Enable AM/PM format
+    };
+    const formattedTime = date.toLocaleTimeString('en-US', optionsTime);
+  
+    if (isToday) {
+      // If date is today, show only the time
+      return formattedTime;
+    } else if (isSameWeek) {
+      // If within the same week, show day of the week and time
+      const optionsDay = { weekday: 'short' }; // Short day name
+      const formattedDay = date.toLocaleDateString('en-US', optionsDay);
+      return `${formattedDay} ${formattedTime}`;
+    } else {
+      // If not today and not within the same week, show dd/mm/yy and time
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
+      const year = String(date.getFullYear()).slice(-2); // Last two digits of the year
+      return `${day}/${month}/${year} ${formattedTime}`;
+    }
+  };
+
+  const handleIncomingCall = (call) => {
+    bindVolumeIndicators(call);
+    setIncomingCall(call);
+    setCallState("ringing");
+
+    // Attach Call events
+    call.on("accept", () => {
+      console.log("Incoming call accepted.");
+      setCallState("active");
+    });
+
+    call.on("disconnect", () => {
+      console.log("Incoming call disconnected.");
+      setIncomingCall(null);
+      setCallState("idle");
+    });
+
+    call.on("error", (error) => {
+      console.error("Incoming call error:", error.message);
+      setIncomingCall(null);
+      setCallState("idle");
+    });
+  };
+
+  const acceptIncomingCall = () => {
+    if (incomingCall) {
+      incomingCall.accept();
+      setCallState("active");
+    }
+  };
+
+  const rejectIncomingCall = () => {
+    if (incomingCall) {
+      incomingCall.reject();
+      setCallState("idle");
+    }
+  };
+
+  const makeOutgoingCall = () => {
+    const device = deviceRef.current;
+    if (!device || !contact?.phone_number) {
+      console.error("Twilio Device is not initialized or contact number is missing.");
+      return;
+    }
+
+    if (callState !== "idle") {
+      console.error("A call is already active.");
+      return; // Prevent initiating a new call
+    }
+    
+    const params = { To: contact.phone_number };
+    const call = deviceRef.current.connect({params}); // Initiate outgoing call
+
+    if (!call) {
+      console.error("Failed to initiate call.");
+      return;
+    }
+
+
+    setCallState("ringing");
+
+    bindVolumeIndicators(deviceRef.current);
+    console.log("Outgoing call initiated.");
+
+    console.log(device)
+    // Attach call lifecycle events via the Device instance
+    device.on("ringing", () => {
+      console.log("The call is ringing.");
+      setCallState("ringing");
+    });
+
+    device.on("connect", () => {
+      console.log("The call has been accepted.");
+      setCallState("active");
+      startCallTimer();
+    });
+
+    device.on("disconnect", () => {
+      console.log("The call has been disconnected.");
+      setCallState("idle");
+      stopCallTimer();
+    });
+
+    device.on("error", (error) => {
+      console.error("Call error:", error.message);
+      setCallState("idle");
+      stopCallTimer();
+    });
+  };
+
+
+  const rejectOutgoingCall = () => {
+    if (callState === "active" || callState === "ringing") {
+      deviceRef.current.disconnectAll();
+      setCallState("idle");
+      stopCallTimer();
+    }
+  };
+
+  useEffect(() => {
+    return () => stopCallTimer(); // Cleanup timer on component unmount
+  }, []);
 
   function fetchGPTStatus() {
     fetch(`${backendURL}/is-allowed`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})

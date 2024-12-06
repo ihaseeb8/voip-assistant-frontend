@@ -19,7 +19,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
   const [isLoading, setisLoading] = useState(true)
   const {user, login, logout} = useContext(AuthContext);
 
-  const deviceRef = useRef(null); // Persistent Device instance
+  // const deviceRef = useRef(null); // Persistent Device instance
   const chatContainerRef = useRef(null); // Scroll container ref
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -223,6 +223,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       setIncomingCall(null);
       setCallState("idle");
     });
+    acceptIncomingCall();
   };
 
   const acceptIncomingCall = () => {
