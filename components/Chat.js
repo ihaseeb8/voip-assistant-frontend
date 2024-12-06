@@ -114,8 +114,12 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       if (!data.token) {
         throw new Error("Failed to retrieve Twilio token");
       }
+      const token = data.token;
+      const decodedToken = jwtDecode(token);
+      const identity = decodedToken.sub || decodedToken.identity;
+      console.log('Device Identity:', identity);
 
-      deviceRef.current = new Device(data.token, { logLevel: 1, codecPreferences: ["opus", "pcmu"],});
+      deviceRef.current = new Device(data.token, { allowIncomingWhileBusy: true, closeProtection: true, logLevel: 1, codecPreferences: ["opus", "pcmu"],});
       deviceRef.current.on("registered", () => console.log("Twilio Device registered successfully"));
       deviceRef.current.on("incoming", handleIncomingCall);
       deviceRef.current.on("deviceChange", () => {
