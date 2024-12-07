@@ -32,7 +32,7 @@ export default function ChatInterface() {
   const [loadFailed, setloadFailed] = useState(false)
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-  const [callState, setCallState] = useState("ringing"); // idle, ringing, active
+  const [callState, setCallState] = useState("idle"); // idle, ringing, active
   const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
   const callTimerRef = useRef(null); // Ref to manage call timer
 
