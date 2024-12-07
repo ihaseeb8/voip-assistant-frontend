@@ -10,7 +10,7 @@ const IncomingCall = (call, onAccept, onReject) => {
         </div>
         <div className="flex space-x-4">
           <button 
-            onClick={onAccept} 
+            onClick={onAccept}
             className="bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800"
           >
             Accept

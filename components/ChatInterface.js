@@ -236,8 +236,8 @@ const showNotification = (call) => {
     bindVolumeIndicators(call);
     setIncomingCall(call);
     setCallState("ringing");
-    showNotification(call);
-  console.log('shown notification')
+    // showNotification(call);
+  // console.log('shown notification')
     // Attach Call events
     call.on("accept", () => {
       console.log("Incoming call accepted.");
