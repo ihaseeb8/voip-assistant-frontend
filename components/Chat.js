@@ -194,7 +194,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts, makeOutgoingCall }) => {
         formData.append('media', selectedImage);
       }
 
-      const response = await fetch(`http://${backendURL}/send-assistant-message`, {
+      const response = await fetch(`${backendURL}/send-assistant-message`, {
         method: "POST",
         headers: {
           'Authorization': `Bearer ${user.access_token}`,
