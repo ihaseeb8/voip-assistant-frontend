@@ -33,11 +33,13 @@ export default function ChatInterface() {
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const [callState, setCallState] = useState("idle"); // idle, ringing, active
+  const [isIncoming, setIsIncoming] = useState(true); // Incoming
   const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
   const callTimerRef = useRef(null); // Ref to manage call timer
 
   // const [incomingCall, setIncomingCall] = useState({parameters: {From: '1234567890'}});  //for testing of notification bar
   const [incomingCall, setIncomingCall] = useState(null); // Incoming call object
+  const [outgoingCall, setOutgoingCall] = useState(null); // Outgoing call
   const [micVolume, setMicVolume] = useState(0);
   const [speakerVolume, setSpeakerVolume] = useState(0);
 
@@ -130,13 +132,161 @@ const showNotification = (call) => {
     });
   };
 
+  const initializeTwilioDevice = async () => {
+    try {
+      const username = user.username || "defaultUser";
+      const response = await fetch(`${backendURL}/token?identity=${username}`);
+      const data = await response.json();
 
+      if (!data.token) {
+        throw new Error("Failed to retrieve Twilio token");
+      }
+      const token = data.token;
+      const decodedToken = jwtDecode(token);
+      const identity = decodedToken.sub || decodedToken.identity;
+      console.log('decodedToken: ', decodedToken);
+      console.log('Device Identity:', identity);
 
+      deviceRef.current = new Device(data.token, { allowIncomingWhileBusy: true, closeProtection: true, logLevel: 1, codecPreferences: ["opus", "pcmu"],});
+      deviceRef.current.on("registered", () => console.log("Twilio Device registered successfully"));
+      deviceRef.current.on("incoming", handleIncomingCall);
+      const device = deviceRef.current;
 
+      deviceRef.current.on("deviceChange", () => {
+        console.log("Device change detected");
+        updateAudioDevices();
+      });
+      deviceRef.current.on("error", (error) => console.error("Device error:", error.message));
+      // deviceRef.current.on("disconnect", () => console.log("Device disconnected"));
+      deviceRef.current.register();
+    } catch (error) {
+      console.error("Error initializing Twilio Device:", error);
+    }
+  };
 
-  // useEffect(()=>{
-  //   fetchContacts();
-  // }, [selectedChat])
+  const startCallTimer = () => {
+    setCallDuration(0); // Reset duration
+    callTimerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const stopCallTimer = () => {
+    clearInterval(callTimerRef.current);
+    callTimerRef.current = null;
+  };
+
+  const formatCallDuration = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const handleIncomingCall = (call) => {
+    if(callState != "idle") {
+      console.log("Ignoring incoming call as device is not free");
+      call.reject();
+      return;
+    }
+    bindVolumeIndicators(call);
+    setIsIncoming(true);
+    setIncomingCall(call);
+    setCallState("ringing");
+    // showNotification(call);
+
+    const handleDisconnectedIncomingCall = () => {
+      console.log("Incoming call disconnected.");
+      // setIncomingCall(null);
+      setCallState("idle");
+    }
+
+    call.on("disconnect", handleDisconnectedIncomingCall);
+    // call.on("cancel", handleDisconnectedIncomingCall);
+    call.on("reject", handleDisconnectedIncomingCall);
+
+    call.on("error", (error) => {
+      console.error("Incoming call error:", error.message);
+      // setIncomingCall(null);
+      setCallState("idle");
+    });
+  };
+
+  const acceptIncomingCall = () => {
+    if (incomingCall) {
+      if (incomingCall.status() === "closed"){
+        setCallState("idle");
+        // setIncomingCall(null);
+      }else{
+        setCallState("active");
+        incomingCall.accept();
+        startCallTimer();
+      }
+    }
+  };
+
+  const rejectIncomingCall = () => {
+    if (incomingCall) {
+      incomingCall.reject();
+      setCallState("idle");
+      // setIncomingCall(null);
+    }
+  };
+
+  const makeOutgoingCall = async () => {
+    const device = deviceRef.current;
+    const contact = selectedChat
+    if (!device || !contact?.phone_number) {
+      console.error("Twilio Device is not initialized or contact number is missing.");
+      return;
+    }
+
+    if (callState !== "idle") {
+      console.error("A call is already active.");
+      return; // Prevent initiating a new call
+    }
+    
+    const params = { To: contact.phone_number };
+      deviceRef.current.connect({params}).then((call) => {
+        setOutgoingCall(call);
+        setIsIncoming(false);
+        setCallState("ringing");
+
+        bindVolumeIndicators(deviceRef.current);
+        console.log("Outgoing call initiated.", call);
+        
+        const handleDisconnectedOutgoingCall = () => {
+          console.log("Outgoing call disconnected.");
+          // setIncomingCall(null);
+          setCallState("idle");
+        }
+        call.on("disconnect", handleDisconnectedOutgoingCall);
+        // call.on("cancel", handleDisconnectedOutgoingCall);
+        call.on("reject", handleDisconnectedOutgoingCall);
+        call.on("accept", () => {
+          console.log("Outgoing call accepted")
+          setCallState("active");
+          startCallTimer();
+        });
+        call.on("connect", () => { console.log("Outgoing call connected")})
+      }).catch((e) => console.error("Error making a call: ", e)) // Initiate outgoing call
+
+  };
+
+  const rejectOutgoingCall = () => {
+    if (callState === "active" || callState === "ringing") {
+      deviceRef.current.disconnectAll();
+      setCallState("idle");
+      stopCallTimer();
+    }
+  };
+
+  const hangUpCall = () => {
+    if (callState === "active" && incomingCall) {
+      incomingCall.disconnect();
+      setCallState("idle");
+      stopCallTimer();
+    }
+  }
   
 
   useEffect(() => {
@@ -184,163 +334,6 @@ const showNotification = (call) => {
     
   }, [])
 
-  const initializeTwilioDevice = async () => {
-    try {
-      const username = user.username || "defaultUser";
-      const response = await fetch(`${backendURL}/token?identity=${username}`);
-      const data = await response.json();
-
-      if (!data.token) {
-        throw new Error("Failed to retrieve Twilio token");
-      }
-      const token = data.token;
-      const decodedToken = jwtDecode(token);
-      const identity = decodedToken.sub || decodedToken.identity;
-      console.log('decodedToken: ', decodedToken);
-      console.log('Device Identity:', identity);
-
-      deviceRef.current = new Device(data.token, { allowIncomingWhileBusy: true, closeProtection: true, logLevel: 1, codecPreferences: ["opus", "pcmu"],});
-      deviceRef.current.on("registered", () => console.log("Twilio Device registered successfully"));
-      deviceRef.current.on("incoming", handleIncomingCall);
-      deviceRef.current.on("deviceChange", () => {
-        console.log("Device change detected");
-        updateAudioDevices();
-      });
-      deviceRef.current.on("error", (error) => console.error("Device error:", error.message));
-      deviceRef.current.on("disconnect", () => console.log("Device disconnected"));
-      deviceRef.current.register();
-    } catch (error) {
-      console.error("Error initializing Twilio Device:", error);
-    }
-  };
-
-  const startCallTimer = () => {
-    setCallDuration(0); // Reset duration
-    callTimerRef.current = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-  };
-
-  const stopCallTimer = () => {
-    clearInterval(callTimerRef.current);
-    callTimerRef.current = null;
-  };
-
-  const formatCallDuration = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
-  };
-
-  const handleIncomingCall = (call) => {
-    bindVolumeIndicators(call);
-    setIncomingCall(call);
-    setCallState("ringing");
-    // showNotification(call);
-  // console.log('shown notification')
-    // Attach Call events
-    call.on("accept", () => {
-      console.log("Incoming call accepted.");
-      setCallState("active");
-    });
-
-    call.on("disconnect", () => {
-      console.log("Incoming call disconnected.");
-      setIncomingCall(null);
-      setCallState("idle");
-    });
-
-    call.on("error", (error) => {
-      console.error("Incoming call error:", error.message);
-      setIncomingCall(null);
-      setCallState("idle");
-    });
-  };
-
-  const acceptIncomingCall = () => {
-    if (incomingCall) {
-      incomingCall.accept();
-      setCallState("active");
-    }
-  };
-
-  const rejectIncomingCall = () => {
-    if (incomingCall) {
-      incomingCall.reject();
-      setCallState("idle");
-    }
-  };
-
-  const makeOutgoingCall = () => {
-    const device = deviceRef.current;
-    if (!device || !contact?.phone_number) {
-      console.error("Twilio Device is not initialized or contact number is missing.");
-      return;
-    }
-
-    if (callState !== "idle") {
-      console.error("A call is already active.");
-      return; // Prevent initiating a new call
-    }
-    
-    const params = { To: contact.phone_number };
-    const call = deviceRef.current.connect({params}); // Initiate outgoing call
-
-    if (!call) {
-      console.error("Failed to initiate call.");
-      return;
-    }
-
-
-    setCallState("ringing");
-
-    bindVolumeIndicators(deviceRef.current);
-    console.log("Outgoing call initiated.");
-
-    console.log(device)
-    // Attach call lifecycle events via the Device instance
-    device.on("ringing", () => {
-      console.log("The call is ringing.");
-      setCallState("ringing");
-    });
-
-    device.on("connect", () => {
-      console.log("The call has been accepted.");
-      setCallState("active");
-      startCallTimer();
-    });
-
-    device.on("disconnect", () => {
-      console.log("The call has been disconnected.");
-      setCallState("idle");
-      stopCallTimer();
-    });
-
-    device.on("error", (error) => {
-      console.error("Call error:", error.message);
-      setCallState("idle");
-      stopCallTimer();
-    });
-  };
-
-
-  const rejectOutgoingCall = () => {
-    if (callState === "active" || callState === "ringing") {
-      deviceRef.current.disconnectAll();
-      setCallState("idle");
-      stopCallTimer();
-    }
-  };
-
-  const hangupCall = () => {
-    if (callState === "active") {
-      incomingCall.disconnect();
-      setCallState("idle");
-      stopCallTimer();
-    }
-  }
-
-
 
   useEffect(() => {
     return () => stopCallTimer(); // Cleanup timer on component unmount
@@ -384,7 +377,6 @@ const showNotification = (call) => {
             }        
         })
   }
-
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen)
   
@@ -457,7 +449,6 @@ const showNotification = (call) => {
     });
   }
 
-
   function formatTimestamp(timestamp) {
     const date = new Date(timestamp);
     const today = new Date();
@@ -518,7 +509,7 @@ const showNotification = (call) => {
     }
   }
   
-
+  
   return (
       <div className="flex h-screen bg-gray-100 overflow-hidden">
         
@@ -675,16 +666,19 @@ const showNotification = (call) => {
        {(callState == "active" || callState == "ringing") && (
         <TopNotificationBar
           userIcon={userIcon}
+          isIncoming={isIncoming}
           incomingCall={incomingCall}
+          outgoingCall={outgoingCall}
           callState={callState}
           callDuration={callDuration}
           acceptIncomingCall={acceptIncomingCall}
           rejectOutgoingCall={rejectOutgoingCall}
           rejectIncomingCall={rejectIncomingCall}
+          hangUpCall={hangUpCall}
           />
        )}
         { selectedChat ? <>
-          <Chat key={selectedChat.phone_number} contact={selectedChat} toggleSidebar={toggleSidebar} fetchContacts={fetchContacts}/>
+          <Chat key={selectedChat.phone_number} contact={selectedChat} toggleSidebar={toggleSidebar} fetchContacts={fetchContacts} makeOutgoingCall={makeOutgoingCall} />
         </> : <>
                 
           <div className="flex-1 flex flex-col">

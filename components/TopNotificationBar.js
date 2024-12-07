@@ -6,26 +6,30 @@ import { Button } from "@/components/ui/button"
 const TopNotificationBar = ({
   userIcon,
   incomingCall,
+  outgoingCall,
+  isIncoming,
   callState,
   callDuration,
   acceptIncomingCall,
   rejectOutgoingCall,
   rejectIncomingCall,
+  hangUpCall,
 }) => {
     const formatCallDuration = (seconds) => {
         const minutes = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
       };
+
   return (
       <div className="w-full bg-green-600 border-b border-gray-200 p-4 py-1 shadow-sm h-14 flex items-center justify-center space-x-2">
         {/* Here comes the number of the person whom we are ringing or active call is goin with */}
      
         <Avatar className="h-8 w-8">
-          <AvatarImage src={userIcon.src} />
+          <AvatarImage src={isIncoming ? "incoming-call.png" : "outgoing-call.png"} />
         </Avatar>
         <span className="text-sm font-semibold text-white">
-          {incomingCall?.parameters.From}
+          { isIncoming ? incomingCall.parameters.From : outgoingCall.customParameters.get("To")}
 
         </span>
 
@@ -37,7 +41,7 @@ const TopNotificationBar = ({
         )}
 
         {/* Accept Button */}
-        {callState === "ringing" && incomingCall && (
+        {callState === "ringing" && isIncoming && (
           <Button
             onClick={acceptIncomingCall}
             className={`rounded
@@ -52,8 +56,10 @@ const TopNotificationBar = ({
         {/* Call Button */}
         <Button
           onClick={
-            callState === "active" || incomingCall === null
-              ? rejectOutgoingCall
+            callState === "active"
+              ? isIncoming 
+                ? hangUpCall
+                : rejectOutgoingCall
               : rejectIncomingCall
           }
           className={`rounded
@@ -65,9 +71,9 @@ const TopNotificationBar = ({
           <span className="">
             {callState === "active"
               ? "End call"
-              : incomingCall
+              : isIncoming
               ? "Decline"
-              : "Hang up"}
+              : "Hang Up"}
           </span>
         </Button>
       </div>
