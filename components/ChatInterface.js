@@ -332,6 +332,16 @@ const showNotification = (call) => {
     }
   };
 
+  const hangupCall = () => {
+    if (callState === "active") {
+      incomingCall.disconnect();
+      setCallState("idle");
+      stopCallTimer();
+    }
+  }
+
+
+
   useEffect(() => {
     return () => stopCallTimer(); // Cleanup timer on component unmount
   }, []);
