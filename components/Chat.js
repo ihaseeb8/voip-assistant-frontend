@@ -225,7 +225,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
       setIncomingCall(null);
       setCallState("idle");
     });
-    acceptIncomingCall();
+    // acceptIncomingCall();
   };
 
   const acceptIncomingCall = () => {
@@ -368,7 +368,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts }) => {
 
   return (
     <div className="flex-1 flex flex-col bg-gray-200"
-    style={{ height: 'calc(100vh - 60px)' }}
+    style={{ height: 'calc(100vh - 56px)' }}
     >
       <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm">
       <div className="flex items-center space-x-4 flex-1">
