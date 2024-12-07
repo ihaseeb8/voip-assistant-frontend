@@ -18,7 +18,7 @@ const TopNotificationBar = ({
         return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
       };
   return (
-      <div className="w-full bg-green-600 border-b border-gray-200 p-4 py-1 shadow-sm h-12 flex items-center justify-center space-x-2">
+      <div className="w-full bg-green-600 border-b border-gray-200 p-4 py-1 shadow-sm h-14 flex items-center justify-center space-x-2">
         {/* Here comes the number of the person whom we are ringing or active call is goin with */}
      
         <Avatar className="h-8 w-8">
