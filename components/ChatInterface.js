@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import AuthContext from "@/components/AuthContext"
 import { useRouter } from "next/navigation"
 import { jwtDecode } from "jwt-decode";
+import TopNotificationBar from "./TopNotificationBar";
 
 export default function ChatInterface() {
 
@@ -31,12 +32,12 @@ export default function ChatInterface() {
   const [loadFailed, setloadFailed] = useState(false)
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-  const [callState, setCallState] = useState("idle"); // idle, ringing, active
+  const [callState, setCallState] = useState("ringing"); // idle, ringing, active
   const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
   const callTimerRef = useRef(null); // Ref to manage call timer
 
-  const [incomingCall, setIncomingCall] = useState(null);
-
+  // const [incomingCall, setIncomingCall] = useState({parameters: {From: '1234567890'}});  //for testing of notification bar
+  const [incomingCall, setIncomingCall] = useState(null); // Incoming call object
   const [micVolume, setMicVolume] = useState(0);
   const [speakerVolume, setSpeakerVolume] = useState(0);
 
@@ -660,7 +661,18 @@ const showNotification = (call) => {
             </div>
           </div>
         </div>
-          
+        <div className="flex flex-col w-full h-full overflow-hidden">
+       {(callState == "active" || callState == "ringing") && (
+        <TopNotificationBar
+          userIcon={userIcon}
+          incomingCall={incomingCall}
+          callState={callState}
+          callDuration={callDuration}
+          acceptIncomingCall={acceptIncomingCall}
+          rejectOutgoingCall={rejectOutgoingCall}
+          rejectIncomingCall={rejectIncomingCall}
+          />
+       )}
         { selectedChat ? <>
           <Chat key={selectedChat.phone_number} contact={selectedChat} toggleSidebar={toggleSidebar} fetchContacts={fetchContacts}/>
         </> : <>
@@ -676,7 +688,7 @@ const showNotification = (call) => {
           </div>
               
         </>}
-
+        </div>
       </div>
   )
 }
