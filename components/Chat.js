@@ -297,10 +297,10 @@ const Chat = ({ contact, toggleSidebar, fetchContacts, makeOutgoingCall }) => {
               >
                 {message.media_path ? (
                   <img
-                    src={`${backendURL}${message.media_path.substring(message.media_path.indexOf("/media"))}`}
+                    src={`${backendURL}/${message.media_path.substring(message.media_path.indexOf("/media"))}`}
                     alt="Message Media"
                     className="rounded-md max-w-full"
-                    style={{ width: '600px', height: 'auto' }} // Temporary debug styles
+                    style={{ width: '600px', height: 'auto', backgroundColor: '#ffffff' }} // Temporary debug styles
                     onError={(e) => {
                       console.error(`Image failed to load: ${backendURL}${message.media_path}`);
                       e.target.style.display = 'none'; // Fallback to hide image
@@ -312,7 +312,7 @@ const Chat = ({ contact, toggleSidebar, fetchContacts, makeOutgoingCall }) => {
                 )}
 
                 {message.media_path && message.content && 
-                  <p className="text-sm py-2">{message.content}</p>
+                  <p className="text-sm pt-2">{message.content}</p>
                 }
                 <span className="text-xs opacity-70 mt-1 block text-right">
                   {message.timestamp ? <>{formatTimestamp(message.timestamp)}</> : <></>}
