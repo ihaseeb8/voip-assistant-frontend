@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useContext } from "react"
+import { Device } from "@twilio/voice-sdk";
+import { useState, useEffect, useContext, useRef } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,12 +13,15 @@ import userIcon from '../app/icons/user-round.svg'
 import { cn } from "@/lib/utils"
 import AuthContext from "@/components/AuthContext"
 import { useRouter } from "next/navigation"
+import { jwtDecode } from "jwt-decode";
+import TopNotificationBar from "./TopNotificationBar";
 
 export default function ChatInterface() {
 
   const {user, login, logout} = useContext(AuthContext);
   const router = useRouter();
 
+  const deviceRef = useRef(null); // Persistent Device instance
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
 
@@ -27,6 +31,17 @@ export default function ChatInterface() {
   const [searchQuery, setSearchQuery] = useState(""); // State for search query
   const [loadFailed, setloadFailed] = useState(false)
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+  const [callState, setCallState] = useState("idle"); // idle, ringing, active
+  const [isIncoming, setIsIncoming] = useState(true); // Incoming
+  const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
+  const callTimerRef = useRef(null); // Ref to manage call timer
+
+  // const [incomingCall, setIncomingCall] = useState({parameters: {From: '1234567890'}});  //for testing of notification bar
+  const [incomingCall, setIncomingCall] = useState(null); // Incoming call object
+  const [outgoingCall, setOutgoingCall] = useState(null); // Outgoing call
+  const [micVolume, setMicVolume] = useState(0);
+  const [speakerVolume, setSpeakerVolume] = useState(0);
 
   // const token = localStorage.getItem('token')
   // const filteredContacts = (contacts || []).filter(contact =>
@@ -43,7 +58,44 @@ export default function ChatInterface() {
     }
   });
 
-  
+  useEffect(() => {
+    if (Notification.permission === "default") {
+        Notification.requestPermission()
+            .then((permission) => {
+                if (permission === "granted") {
+                    console.log("Notifications enabled!");
+                } else {
+                    console.log("Notifications denied!");
+                }
+            })
+            .catch((err) => console.error("Error requesting notification permission:", err));
+    }
+}, []);
+
+const showNotification = (call) => {
+  if (Notification.permission === "granted") {
+      const notification = new Notification(`Incoming Call From ${call.parameters.From}`, {
+        icon: "/call.png",
+        tag: call.parameters.CallSid,
+        renotify: false,
+        // requireInteraction: true,
+        priority: 1
+    });
+
+      // Handle button clicks
+      notification.addEventListener("click", (event) => {
+
+              console.log("Notification clicked (no action).");
+          
+      });
+      notification.addEventListener("close", ()=>{
+        console.log("Notification closed.");
+      })
+  } else {
+      console.log("Notifications not allowed by the user.");
+  }
+};
+
   // Inside the Home component
   const handleChatSelect = (contact) => {
 
@@ -59,28 +111,201 @@ export default function ChatInterface() {
     
   }
 
+  const [availableDevices, setAvailableDevices] = useState({
+    speakers: [],
+    ringers: [],
+  });
+  const [selectedDevices, setSelectedDevices] = useState({
+    speakers: [],
+    ringers: [],
+  });
+  
+  const updateAudioDevices = () => {
+    deviceRef.current.audio.speakerDevices.set(selectedDevices.speakers);
+    deviceRef.current.audio.ringtoneDevices.set(selectedDevices.ringers);
+  };
 
+  const bindVolumeIndicators = (call) => {
+    call.on("volume", (inputVolume, outputVolume) => {
+      setMicVolume(Math.floor(inputVolume * 100)); // Convert to percentage
+      setSpeakerVolume(Math.floor(outputVolume * 100));
+    });
+  };
 
-  // useEffect(()=>{
-  //   fetchContacts();
-  // }, [selectedChat])
+  const initializeTwilioDevice = async () => {
+    try {
+      const username = user.username || "defaultUser";
+      const response = await fetch(`${backendURL}/token?identity=${username}`);
+      const data = await response.json();
+
+      if (!data.token) {
+        throw new Error("Failed to retrieve Twilio token");
+      }
+      const token = data.token;
+      const decodedToken = jwtDecode(token);
+      const identity = decodedToken.sub || decodedToken.identity;
+      console.log('decodedToken: ', decodedToken);
+      console.log('Device Identity:', identity);
+
+      deviceRef.current = new Device(data.token, { allowIncomingWhileBusy: true, closeProtection: true, logLevel: 1, codecPreferences: ["opus", "pcmu"],});
+      deviceRef.current.on("registered", () => console.log("Twilio Device registered successfully"));
+      deviceRef.current.on("incoming", handleIncomingCall);
+      const device = deviceRef.current;
+
+      deviceRef.current.on("deviceChange", () => {
+        console.log("Device change detected");
+        updateAudioDevices();
+      });
+      deviceRef.current.on("error", (error) => console.error("Device error:", error.message));
+      // deviceRef.current.on("disconnect", () => console.log("Device disconnected"));
+      deviceRef.current.register();
+    } catch (error) {
+      console.error("Error initializing Twilio Device:", error);
+    }
+  };
+
+  const startCallTimer = () => {
+    setCallDuration(0); // Reset duration
+    callTimerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const stopCallTimer = () => {
+    clearInterval(callTimerRef.current);
+    callTimerRef.current = null;
+  };
+
+  const formatCallDuration = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const handleIncomingCall = (call) => {
+    if(callState != "idle") {
+      console.log("Ignoring incoming call as device is not free");
+      call.reject();
+      return;
+    }
+    bindVolumeIndicators(call);
+    setIsIncoming(true);
+    setIncomingCall(call);
+    setCallState("ringing");
+    // showNotification(call);
+
+    const handleDisconnectedIncomingCall = () => {
+      console.log("Incoming call disconnected.");
+      // setIncomingCall(null);
+      setCallState("idle");
+    }
+
+    call.on("disconnect", handleDisconnectedIncomingCall);
+    // call.on("cancel", handleDisconnectedIncomingCall);
+    call.on("reject", handleDisconnectedIncomingCall);
+
+    call.on("error", (error) => {
+      console.error("Incoming call error:", error.message);
+      // setIncomingCall(null);
+      setCallState("idle");
+    });
+  };
+
+  const acceptIncomingCall = () => {
+    if (incomingCall) {
+      if (incomingCall.status() === "closed"){
+        setCallState("idle");
+        // setIncomingCall(null);
+      }else{
+        setCallState("active");
+        incomingCall.accept();
+        startCallTimer();
+      }
+    }
+  };
+
+  const rejectIncomingCall = () => {
+    if (incomingCall) {
+      incomingCall.reject();
+      setCallState("idle");
+      // setIncomingCall(null);
+    }
+  };
+
+  const makeOutgoingCall = async () => {
+    const device = deviceRef.current;
+    const contact = selectedChat
+    if (!device || !contact?.phone_number) {
+      console.error("Twilio Device is not initialized or contact number is missing.");
+      return;
+    }
+
+    if (callState !== "idle") {
+      console.error("A call is already active.");
+      return; // Prevent initiating a new call
+    }
+    
+    const params = { To: contact.phone_number };
+      deviceRef.current.connect({params}).then((call) => {
+        setOutgoingCall(call);
+        setIsIncoming(false);
+        setCallState("ringing");
+
+        bindVolumeIndicators(deviceRef.current);
+        console.log("Outgoing call initiated.", call);
+        
+        const handleDisconnectedOutgoingCall = () => {
+          console.log("Outgoing call disconnected.");
+          // setIncomingCall(null);
+          setCallState("idle");
+        }
+        call.on("disconnect", handleDisconnectedOutgoingCall);
+        // call.on("cancel", handleDisconnectedOutgoingCall);
+        call.on("reject", handleDisconnectedOutgoingCall);
+        call.on("accept", () => {
+          console.log("Outgoing call accepted")
+          setCallState("active");
+          startCallTimer();
+        });
+        call.on("connect", () => { console.log("Outgoing call connected")})
+      }).catch((e) => console.error("Error making a call: ", e)) // Initiate outgoing call
+
+  };
+
+  const rejectOutgoingCall = () => {
+    if (callState === "active" || callState === "ringing") {
+      deviceRef.current.disconnectAll();
+      setCallState("idle");
+      stopCallTimer();
+    }
+  };
+
+  const hangUpCall = () => {
+    if (callState === "active" && incomingCall) {
+      incomingCall.disconnect();
+      setCallState("idle");
+      stopCallTimer();
+    }
+  }
   
 
   useEffect(() => {
+    console.log('using effect to initialize twilio device')
     fetchContacts();
     fetchGPTStatus();
+    initializeTwilioDevice();
     // console.log(backendURL)
 
     // Websocket logic.
     // WebSocket setup
-    const socket = new WebSocket(`ws://${backendURL}/ws`);
+    const socket = new WebSocket(`${backendURL.replace('http://', 'ws://').replace('https://', 'ws://')}/ws`);
     
     socket.onopen = function () {
-        console.log("WebSocket connection established");
+        console.log("ChatInterface: WebSocket connection established");
     };
 
     socket.onerror = function (error) {
-        console.error("WebSocket error observed:", error);
+        console.error("ChatInterface: WebSocket error observed:", error);
     };
 
     socket.onmessage = function (event) {
@@ -99,7 +324,7 @@ export default function ChatInterface() {
     };
 
     socket.onclose = function () {
-        // console.log("WebSocket connection closed");
+        console.log("ChatInterface: WebSocket connection closed");
     };
 
     // Cleanup the WebSocket connection when the component unmounts
@@ -109,8 +334,13 @@ export default function ChatInterface() {
     
   }, [])
 
+
+  useEffect(() => {
+    return () => stopCallTimer(); // Cleanup timer on component unmount
+  }, []);
+
   function fetchGPTStatus() {
-    fetch(`http://${backendURL}/is-allowed`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})
+    fetch(`${backendURL}/is-allowed`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})
       .then((res) => {
         if (!res.ok) {
           throw new Error('Network response was not ok');
@@ -130,7 +360,7 @@ export default function ChatInterface() {
   
 
   function fetchContacts(){
-    fetch(`http://${backendURL}/contacts-list`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})
+    fetch(`${backendURL}/contacts-list`, {method: "GET", headers: {'Authorization': `Bearer ${user.access_token}`}})
         .then((res) => {
             if(res.status == 401){
                 logout();
@@ -148,7 +378,6 @@ export default function ChatInterface() {
         })
   }
 
-
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen)
   
   const toggleGPT = (event) => {
@@ -163,7 +392,7 @@ export default function ChatInterface() {
   }
 
   function updateGPTStatus(allowGPT) {
-    fetch(`http://${backendURL}/let-gpt-answer`, {
+    fetch(`${backendURL}/let-gpt-answer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -189,7 +418,7 @@ export default function ChatInterface() {
   }
 
   function toggleArchiveChat(contact) {
-    fetch(`http://${backendURL}/archive-chat`, {
+    fetch(`${backendURL}/archive-chat`, {
         method: "POST",
         headers: {
             'Authorization': `Bearer ${user.access_token}`,
@@ -219,7 +448,6 @@ export default function ChatInterface() {
         alert("Failed to update archive status. Please try again.");
     });
   }
-
 
   function formatTimestamp(timestamp) {
     const date = new Date(timestamp);
@@ -281,7 +509,7 @@ export default function ChatInterface() {
     }
   }
   
-
+  
   return (
       <div className="flex h-screen bg-gray-100 overflow-hidden">
         
@@ -434,9 +662,23 @@ export default function ChatInterface() {
             </div>
           </div>
         </div>
-
+        <div className="flex flex-col w-full h-full overflow-hidden">
+       {(callState == "active" || callState == "ringing") && (
+        <TopNotificationBar
+          userIcon={userIcon}
+          isIncoming={isIncoming}
+          incomingCall={incomingCall}
+          outgoingCall={outgoingCall}
+          callState={callState}
+          callDuration={callDuration}
+          acceptIncomingCall={acceptIncomingCall}
+          rejectOutgoingCall={rejectOutgoingCall}
+          rejectIncomingCall={rejectIncomingCall}
+          hangUpCall={hangUpCall}
+          />
+       )}
         { selectedChat ? <>
-          <Chat key={selectedChat.phone_number} contact={selectedChat} toggleSidebar={toggleSidebar} fetchContacts={fetchContacts}/>
+          <Chat key={selectedChat.phone_number} contact={selectedChat} toggleSidebar={toggleSidebar} fetchContacts={fetchContacts} makeOutgoingCall={makeOutgoingCall} />
         </> : <>
                 
           <div className="flex-1 flex flex-col">
@@ -450,7 +692,7 @@ export default function ChatInterface() {
           </div>
               
         </>}
-
+        </div>
       </div>
   )
 }
