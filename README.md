@@ -22,7 +22,7 @@ To run the front-end locally, follow these steps:
 1. Clone the repository:
 
     ```bash
-    git clone https://github.com/ihaseeb8/dan-chatbot-frontend
+    git clone https://github.com/ihaseeb8/voip-assistant-frontend
     cd voip-assistant-frontend
     ```
 
